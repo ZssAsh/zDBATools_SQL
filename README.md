@@ -6,6 +6,7 @@
 [![LinkedServers](https://img.shields.io/badge/Feature-LinkedServers%20Based-lightgrey)]()
 
 ---
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 ## 📘 Overview
 
@@ -64,3 +65,7 @@ It provides a near real-time view of **who is connecting**, **from where**, and 
    ```sql
    INSERT INTO [Shared].[LinkedServers] (LinkedServerName, Enabled)
    VALUES ('SQLPROD01', 1), ('SQLUAT01', 1), ('SQLDEV01', 0);
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
