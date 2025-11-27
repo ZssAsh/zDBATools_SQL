@@ -1,5 +1,6 @@
 /* ================================================================================================
    SQL Server Access, Permissions & Risk Evaluation Report  -- FINAL v7.8
+   Ziad Samhan
    ------------------------------------------------------------------------------------------------
    PURPOSE:
        • Inventory server logins and per-database principals, aggregate permissions, and compute risk.
