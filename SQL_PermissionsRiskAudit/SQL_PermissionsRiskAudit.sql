@@ -2,16 +2,16 @@
    SQL Server Access, Permissions & Risk Evaluation Report  -- FINAL v7.8
    ------------------------------------------------------------------------------------------------
    PURPOSE:
-       • Inventory server logins and per-database principals, aggregate permissions, and compute risk.
-       • Detect high-privilege accounts (sysadmin, dbo, db_owner), orphaned users, disabled/unused logins.
-       • Capture logins that exist but have NO database mapping (DatabaseName = NULL)
+       â€¢ Inventory server logins and per-database principals, aggregate permissions, and compute risk.
+       â€¢ Detect high-privilege accounts (sysadmin, dbo, db_owner), orphaned users, disabled/unused logins.
+       â€¢ Capture logins that exist but have NO database mapping (DatabaseName = NULL)
    ------------------------------------------------------------------------------------------------
    ACTION MODEL:
        1) Address Immediately: SysAdmin / DB Owner / db_owner member
        2) Review: Non-admins with any database/server permissions
        3) Clean-up: Disabled or orphaned logins/users, SA login not secured
    ------------------------------------------------------------------------------------------------
-   SAFE TO RUN — READ ONLY
+   SAFE TO RUN â€” READ ONLY
    ================================================================================================ */
 
 SET NOCOUNT ON;
