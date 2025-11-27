@@ -8,64 +8,48 @@
 ---
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-## 📘 Overview
+zDBATools_SQL
 
-**zDBATools_SQL** is a lightweight, SQL-native framework that **centrally captures live session and database activity** from multiple SQL Server instances —  
-✅ **Without third-party tools**  
-✅ **Without agents or additional licenses**  
-✅ **Using only native SQL Server features**
+Welcome to zDBATools_SQL — a curated collection of SQL Server scripts, queries, and DBA tools designed for database administrators, developers, and data professionals.
 
-It provides a near real-time view of **who is connecting**, **from where**, and **to which database/application** across all your linked servers.
+This repository is all about practical, ready-to-use SQL Server solutions that help you monitor, audit, troubleshoot, and manage your databases more effectively.
 
----
+🔹 What’s Inside
 
-## 🚀 Key Features
+Access & Permissions Audits – Detect high-privilege accounts, orphaned users, disabled logins, risky SA accounts, and generate detailed risk reports.
 
-- 🔗 **Linked Server-based collection** — Secure, agentless querying across instances  
-- 🧩 **Centralized tables** for session, database, and host information  
-- 🔄 **SQL Agent Job automation** for scheduled collection  
-- ⚙️ **Ignore lists** (applications, logins, hosts, databases) to reduce noise  
-- 🧠 **Merge logic** keeps captured data up-to-date automatically  
-- 🪶 **Lightweight footprint** — no CLR, triggers, or external services  
+Performance & Monitoring Queries – Track slow queries, index usage, execution stats, and server health metrics.
 
----
+Maintenance & Troubleshooting – Scripts for backup checks, consistency validation, error log review, and general housekeeping.
 
-## 🏗️ Architecture Overview
+Database Management Helpers – Useful scripts for schema inspection, dependency tracking, and server/database inventory.
 
-| Component | Description |
-|------------|-------------|
-| **Database** | `zDBATools` – shared utility DB |
-| **Schemas** | `[SC]` for Session Capture, `[Shared]` for Linked Server configs |
-| **Tables** | `CapturedSessions`, `DatabasesSnapshot`, `Ignored*`, `LinkedServers` |
-| **Stored Procedures** | `[SC].[usp_CaptureSessions]`, `[SC].[usp_RefreshDatabasesSnapshot]` |
-| **View** | `[SC].[uvw_DatabasesSnapshot]` – unified snapshot of DBs + Sessions |
-| **SQL Agent Job** | `zDBATools_CaptureSessions` runs every 30 minutes |
+🔹 Why This Repo Exists
 
----
+Over years of DBA work, I realized the need for a central place for practical SQL Server scripts — not just examples, but tools I actually use daily. This repo is my way of sharing that knowledge, and it continues to grow with new ideas and community input.
 
-## ⚙️ Installation
+🔹 How to Use
 
-### 1️⃣ Prerequisites
+Browse the folder structure and pick a query or script.
 
-- SQL Server 2016 or later  
-- Linked Servers configured between participating instances  
-- Permissions to create schemas, tables, and jobs  
+Review the script carefully (all are safe to run in read-only mode unless stated otherwise).
 
----
+Customize database/server names if needed.
 
-### 2️⃣ Deployment Steps
+Run it in SQL Server Management Studio (SSMS) or your preferred SQL tool.
 
-1. Create or use a shared DBA utility database (e.g., `zDBATools`)  
-2. Run the provided SQL script in order:
-   - Schema creation (`[SC]`, `[Shared]`)
-   - Table creation scripts  
-   - Stored procedures (`usp_CaptureSessions`, `usp_RefreshDatabasesSnapshot`)  
-   - SQL Agent Job creation script  
-3. Populate `[Shared].[LinkedServers]` with your target linked servers:
-   ```sql
-   INSERT INTO [Shared].[LinkedServers] (LinkedServerName, Enabled)
-   VALUES ('SQLPROD01', 1), ('SQLUAT01', 1), ('SQLDEV01', 0);
+🔹 Contributing
 
-## 📄 License
+Contributions are welcome! Feel free to:
 
-This project is licensed under the [MIT License](LICENSE).
+Add your own useful queries or scripts
+
+Suggest improvements to existing scripts
+
+Report bugs or issues
+
+Please follow standard SQL best practices and keep scripts safe for production use.
+
+🔹 Connect
+
+Follow me for more DBA tips, SQL Server scripts, and automation ideas.
