@@ -1,4 +1,4 @@
-# 🧠 zDBATools_SQL — Centralized SQL Session Capture (No 3rd Party Tools or Agents)
+# 🧠 zDBATools_SQL — a collection of SQL Server scripts, queries, and DBA tools designed for database administrators, developers, and data professionals.
 
 [![SQL Server](https://img.shields.io/badge/Platform-SQL%20Server-blue?logo=microsoftsqlserver)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)]()
