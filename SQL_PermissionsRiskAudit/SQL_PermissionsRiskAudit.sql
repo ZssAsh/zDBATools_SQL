@@ -120,15 +120,18 @@ SELECT
     END AS RiskScore,
 
     CASE
-        WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN ''High''
-        WHEN dp.name=''dbo'' OR EXISTS(
-            SELECT 1 FROM sys.database_role_members drm
-            JOIN sys.database_principals r ON r.principal_id=drm.role_principal_id
-            WHERE r.name=''db_owner'' AND drm.member_principal_id=dp.principal_id
-        ) THEN ''High''
-        WHEN calc.BaseScore>=60 THEN ''Medium''
-        ELSE ''Low''
-    END AS RiskLevel,
+    WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN ''High''
+    WHEN dp.name=''dbo'' OR EXISTS(
+        SELECT 1 FROM sys.database_role_members drm
+        JOIN sys.database_principals r ON r.principal_id=drm.role_principal_id
+        WHERE r.name=''db_owner'' AND drm.member_principal_id=dp.principal_id
+    ) THEN ''High''
+    WHEN sp.sid = 0x01 AND sp.name <> ''sa'' AND ISNULL(sp.is_disabled,0)=1 THEN ''Low''  -- Secured SA
+    WHEN calc.BaseScore>=100 THEN ''High''
+    WHEN calc.BaseScore>=60 THEN ''Medium''
+    ELSE ''Low''
+END AS RiskLevel,
+
 
     RTRIM(CONCAT(
         CASE WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN ''SysAdmin; '' ELSE '''' END,
