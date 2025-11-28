@@ -1,5 +1,5 @@
 /* ================================================================================================
-   SQL Server Access, Permissions & Risk Evaluation Report  -- FINAL v7.8
+   SQL Server Access, Permissions & Risk Evaluation Report  -- FINAL v7.9
    Ziad Samhan
    ------------------------------------------------------------------------------------------------
    PURPOSE:
@@ -11,6 +11,12 @@
        1) Address Immediately: SysAdmin / DB Owner / db_owner member
        2) Review: Non-admins with any database/server permissions
        3) Clean-up: Disabled or orphaned logins/users, SA login not secured
+	
+	------------------------------------------------------------------------------------------------
+   v7.9:
+       1) Fix: Cannot resolve collation conflict using COLLATE SQL_Latin1_General_CP1_CI_AS
+       2) Fix Cast each concatenated piece inside STRING_AGG to NVARCHAR(MAX).
+
    ------------------------------------------------------------------------------------------------
    SAFE TO RUN — READ ONLY
    ================================================================================================ */
@@ -151,31 +157,59 @@ END AS RiskLevel,
         CASE WHEN f.IsOrphaned=1 THEN ''Orphaned user; '' ELSE '''' END
     )) AS RiskFactors,
 
+
+
+
+
+
+
+
+
+
     -- Server permissions + roles
     ISNULL(
         (
-            SELECT STRING_AGG(p.permission_name + '' ('' + p.state_desc + '')'', ''; '')
-            FROM sys.server_permissions p 
-            WHERE p.grantee_principal_id = sp.principal_id
-              AND p.state_desc IN (''GRANT'',''GRANT_WITH_GRANT_OPTION'')
+			SELECT STRING_AGG(CAST(CONCAT(p.permission_name, N'' ('', p.state_desc, N'')'') AS NVARCHAR(MAX)), N''; '') COLLATE SQL_Latin1_General_CP1_CI_AS
+			FROM sys.server_permissions p
+			WHERE p.grantee_principal_id = sp.principal_id
+			AND p.state_desc IN (N''GRANT'', N''GRANT_WITH_GRANT_OPTION'')
+
         ), ''''
     )
     +
     ISNULL(
         ''; '' + (
-            SELECT STRING_AGG(r.name, ''; '')
-            FROM sys.server_role_members srm
-            JOIN sys.server_principals r ON r.principal_id = srm.role_principal_id
-            WHERE srm.member_principal_id = sp.principal_id
+			SELECT STRING_AGG(CAST(r.name AS NVARCHAR(MAX)), N''; '') COLLATE SQL_Latin1_General_CP1_CI_AS
+			FROM sys.server_role_members srm
+			JOIN sys.server_principals r ON r.principal_id = srm.role_principal_id
+			WHERE srm.member_principal_id = sp.principal_id
         ), ''''
     ) AS GrantedServerPermissions,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     -- Database permissions + role memberships
     ISNULL(
         (
-            SELECT STRING_AGG(p.permission_name 
+            SELECT STRING_AGG(CAST(p.permission_name 
                               + CASE WHEN p.major_id>0 THEN '' on ''+OBJECT_NAME(p.major_id) ELSE '''' END
-                              + '' (''+p.state_desc+'')'', ''; '')
+                              + '' (''+p.state_desc+'')'' AS VARCHAR(MAX)), ''; '')
             FROM sys.database_permissions p
             WHERE p.grantee_principal_id = dp.principal_id
               AND p.state_desc IN (''GRANT'',''GRANT_WITH_GRANT_OPTION'')
@@ -183,7 +217,7 @@ END AS RiskLevel,
     ) 
     +
     ISNULL(''; '' + (
-            SELECT STRING_AGG(r.name, ''; '')
+            SELECT STRING_AGG(CAST(r.name AS NVARCHAR(MAX)), ''; '')
             FROM sys.database_role_members drm
             JOIN sys.database_principals r ON r.principal_id = drm.role_principal_id
             WHERE drm.member_principal_id = dp.principal_id
@@ -340,19 +374,20 @@ SELECT
     -- Server permissions + roles
     ISNULL(
         (
-            SELECT STRING_AGG(p.permission_name + ' (' + p.state_desc + ')', '; ')
-            FROM sys.server_permissions p 
-            WHERE p.grantee_principal_id = sp.principal_id
-              AND p.state_desc IN ('GRANT','GRANT_WITH_GRANT_OPTION')
+			SELECT STRING_AGG(CAST(CONCAT(p.permission_name, N' (', p.state_desc, N')') AS NVARCHAR(MAX)), N'; ') COLLATE SQL_Latin1_General_CP1_CI_AS
+			FROM sys.server_permissions p
+			WHERE p.grantee_principal_id = sp.principal_id
+			AND p.state_desc IN (N'GRANT', N'GRANT_WITH_GRANT_OPTION')
+
         ), ''
     )
     +
     ISNULL(
         '; ' + (
-            SELECT STRING_AGG(r.name, '; ')
-            FROM sys.server_role_members srm
-            JOIN sys.server_principals r ON r.principal_id = srm.role_principal_id
-            WHERE srm.member_principal_id = sp.principal_id
+			SELECT STRING_AGG(CAST(r.name AS NVARCHAR(MAX)), N'; ') COLLATE SQL_Latin1_General_CP1_CI_AS
+			FROM sys.server_role_members srm
+			JOIN sys.server_principals r ON r.principal_id = srm.role_principal_id
+			WHERE srm.member_principal_id = sp.principal_id
         ), ''
     ) AS GrantedServerPermissions,
 
