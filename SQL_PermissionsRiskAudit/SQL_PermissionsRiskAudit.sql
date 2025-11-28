@@ -20,7 +20,6 @@
 	- Enh: optional compact outputs that replace long aggregated strings with counts:
 		  GrantedServerPermissionsCount, GrantedServerRolesCount,
 		  GrantedDatabasePermissionsCount, GrantedDatabaseRolesCount
-	- Enh: remaned shorten column names 
 
    ------------------------------------------------------------------------------------------------
    SAFE TO RUN — READ ONLY
@@ -32,34 +31,29 @@ IF OBJECT_ID('tempdb..#AccessMatrix') IS NOT NULL DROP TABLE #AccessMatrix;
 
 CREATE TABLE #AccessMatrix
 (
-    [SrvName]               sysname,
-    [DbName]             sysname NULL,
-    [Login]                sysname NULL,
-    [LoginType]                nvarchar(60) NULL,
-    [LoginDisabled]            bit,
-    [IsSA]                bit,
-    [DbUser]               sysname NULL,
-    [PrincipalType]          nvarchar(60),
-    [DefaultSchema]            sysname NULL,
-
-    IsSysAdmin               bit,
-    [IsDbOwner]     bit,
-    [IsDbOwnerMember]          bit,
-
-    [HasDDL]                   bit,
-    [HasWrite]                 bit,
-    HasRead                  bit,
-    HasExecute               bit,
-
-    IsOrphaned               bit,
-
-    RiskScore                int,
-    RiskLevel                varchar(10),
-    RiskFactors              nvarchar(4000),
-
-    [SrvPerms] nvarchar(50),
-    [DbPerms] nvarchar(50),
-    RecommendedAction        nvarchar(1000)
+    [SrvName]           sysname,            -- SQL Instance Name
+    [DbName]            sysname NULL,       -- Target DB (NULL = login exists but no DB mapping)
+    [Login]             sysname NULL,       -- Server login name
+    [LoginType]         nvarchar(60) NULL,  -- SQL_LOGIN / WINDOWS_LOGIN / GROUP    
+    [LoginDisabled]     bit,                -- Flag if login is disabled
+    [IsSA]              bit,                -- sp.sid = 0x01 identifies SA/renamed SA
+    [DbUser]            sysname NULL,       -- Database user for this login (if exists)
+    [PrincipalType]     nvarchar(60),       -- SQL_USER / GROUP / NO_DB_ACCESS etc
+    [DefaultSchema]     sysname NULL,       -- Default Schema
+    [IsSysAdmin]        bit,                -- True if login is sysadmin
+    [IsDbOwner]         bit,                -- dbo mapped user at DB level
+    [IsDbOwnerMember]   bit,                -- Member of db_owner role
+    [HasDDL]            bit,                -- DB DDL permissions or db_ddladmin
+    [HasWrite]          bit,                -- INSERT/UPDATE/DELETE or db_datawriter
+    [HasRead]           bit,                -- SELECT perm or db_datareader
+    [HasExecute]        bit,                -- EXECUTE permission
+    [IsOrphan]          bit,                -- DB user with no matching server login
+    [RiskScore]         int,                -- Weighted risk scoring (5 - 100)
+    [RiskLevel]         varchar(10),        -- High / Medium / Low
+    [RiskFactors]       nvarchar(4000),     -- Text explanation why flagged     
+    [SrvPerms]          nvarchar(50),       -- server grants + server roles
+    [DbPerms]           nvarchar(50),       -- db grants + db roles
+    [RecommendedAction] nvarchar(1000)      -- Remediation guidance
 );
 
 DECLARE @batch NVARCHAR(MAX) = N'';
@@ -81,20 +75,20 @@ INSERT INTO #AccessMatrix
     [DbUser],
     [PrincipalType],
     [DefaultSchema],
-    IsSysAdmin,
+    [IsSysAdmin],
     [IsDbOwner],
     [IsDbOwnerMember],
     [HasDDL],
     [HasWrite],
-    HasRead,
-    HasExecute,
-    IsOrphaned,
-    RiskScore,
-    RiskLevel,
-    RiskFactors,
+    [HasRead],
+    [HasExecute],
+    [IsOrphan],
+    [RiskScore],
+    [RiskLevel],
+    [RiskFactors],
     [SrvPerms],
     [DbPerms],
-    RecommendedAction
+    [RecommendedAction]
 )
 SELECT
     @@SERVERNAME AS [SrvName],
@@ -106,7 +100,7 @@ SELECT
     dp.name AS [DbUser],
     dp.type_desc AS [PrincipalType],
     dp.default_schema_name AS [DefaultSchema],
-    CAST(CASE WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN 1 ELSE 0 END AS bit) AS IsSysAdmin,
+    CAST(CASE WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN 1 ELSE 0 END AS bit) AS [IsSysAdmin],
     CAST(CASE WHEN dp.name=''dbo'' THEN 1 ELSE 0 END AS bit) AS [IsDbOwner],
     CAST(CASE WHEN EXISTS(
         SELECT 1 FROM sys.database_role_members drm
@@ -116,9 +110,9 @@ SELECT
 
     f.[HasDDL],
     f.[HasWrite],
-    f.HasRead,
-    f.HasExecute,
-    f.IsOrphaned,
+    f.[HasRead],
+    f.[HasExecute],
+    f.[IsOrphan],
 
     CASE
         WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN 100
@@ -128,7 +122,7 @@ SELECT
             WHERE r.name=''db_owner'' AND drm.member_principal_id=dp.principal_id
         ) THEN 100
         ELSE CASE WHEN calc.BaseScore<5 THEN 5 WHEN calc.BaseScore>100 THEN 100 ELSE calc.BaseScore END
-    END AS RiskScore,
+    END AS [RiskScore],
 
     CASE
     WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN ''High''
@@ -141,7 +135,7 @@ SELECT
     WHEN calc.BaseScore>=100 THEN ''High''
     WHEN calc.BaseScore>=60 THEN ''Medium''
     ELSE ''Low''
-END AS RiskLevel,
+END AS [RiskLevel],
 
 
     RTRIM(CONCAT(
@@ -155,12 +149,12 @@ END AS RiskLevel,
         ) THEN ''db_owner/dbo; '' ELSE '''' END,
         CASE WHEN f.[HasDDL]=1 THEN ''DDL perms; '' ELSE '''' END,
         CASE WHEN f.[HasWrite]=1 THEN ''Write perms; '' ELSE '''' END,
-        CASE WHEN f.HasExecute=1 THEN ''Execute perms; '' ELSE '''' END,
-        CASE WHEN f.HasRead=1 THEN ''Read perms; '' ELSE '''' END,
+        CASE WHEN f.[HasExecute]=1 THEN ''Execute perms; '' ELSE '''' END,
+        CASE WHEN f.[HasRead]=1 THEN ''Read perms; '' ELSE '''' END,
         CASE WHEN dp.default_schema_name=''dbo'' THEN ''Default schema dbo; '' ELSE '''' END,
         CASE WHEN ISNULL(sp.is_disabled,0)=1 THEN ''Login disabled; '' ELSE '''' END,
-        CASE WHEN f.IsOrphaned=1 THEN ''Orphaned user; '' ELSE '''' END
-    )) AS RiskFactors,
+        CASE WHEN f.[IsOrphan]=1 THEN ''Orphaned user; '' ELSE '''' END
+    )) AS [RiskFactors],
 
     -- Server permissions + roles
 	CONCAT( N''Permissions='',
@@ -212,10 +206,10 @@ CONCAT(
           WHERE r.name=''db_owner'' AND drm.member_principal_id=dp.principal_id
       ) THEN ''Address Immediately: Highly privileged account (SysAdmin or DB Owner).''
     -- Disabled or orphaned accounts
-    WHEN ISNULL(sp.is_disabled,0)=1 OR f.IsOrphaned=1 THEN
+    WHEN ISNULL(sp.is_disabled,0)=1 OR f.[IsOrphan]=1 THEN
          ''Clean-up: Disabled or orphaned account.''
     ELSE ''Review: Account has database permissions.''
-END AS RecommendedAction
+END AS [RecommendedAction]
 
 FROM sys.database_principals dp
 LEFT JOIN sys.server_principals sp ON dp.sid=sp.sid
@@ -255,27 +249,27 @@ CROSS APPLY (
             SELECT 1 FROM sys.database_role_members drm
             JOIN sys.database_principals r ON r.principal_id=drm.role_principal_id
             WHERE drm.member_principal_id=dp.principal_id AND r.name=''db_datareader''
-        ) THEN 1 ELSE 0 END AS bit) AS HasRead,
+        ) THEN 1 ELSE 0 END AS bit) AS [HasRead],
 
         CAST(CASE WHEN EXISTS(
             SELECT 1 FROM sys.database_permissions p
             WHERE p.grantee_principal_id=dp.principal_id
               AND p.permission_name=''EXECUTE''
               AND p.state_desc IN (''GRANT'',''GRANT_WITH_GRANT_OPTION'')
-        ) THEN 1 ELSE 0 END AS bit) AS HasExecute,
+        ) THEN 1 ELSE 0 END AS bit) AS [HasExecute],
 
         CAST(CASE WHEN dp.type_desc IN (''SQL_USER'',''WINDOWS_USER'',''WINDOWS_GROUP'') AND (sp.sid IS NULL OR dp.sid<>sp.sid)
-                  OR (dp.type_desc=''SQL_USER'' AND sp.name IS NULL) THEN 1 ELSE 0 END AS bit) AS IsOrphaned
+                  OR (dp.type_desc=''SQL_USER'' AND sp.name IS NULL) THEN 1 ELSE 0 END AS bit) AS [IsOrphan]
 ) AS f
 CROSS APPLY (
     SELECT
         (CASE WHEN f.[HasDDL]=1 THEN 60 ELSE 0 END) +
         (CASE WHEN f.[HasWrite]=1 THEN 50 ELSE 0 END) +
-        (CASE WHEN f.HasExecute=1 THEN 35 ELSE 0 END) +
-        (CASE WHEN f.HasRead=1 THEN 20 ELSE 0 END) +
+        (CASE WHEN f.[HasExecute]=1 THEN 35 ELSE 0 END) +
+        (CASE WHEN f.[HasRead]=1 THEN 20 ELSE 0 END) +
         (CASE WHEN dp.default_schema_name=''dbo'' THEN 10 ELSE 0 END) +
         (CASE WHEN ISNULL(sp.is_disabled,0)=1 THEN -5 ELSE 0 END) +
-        (CASE WHEN f.IsOrphaned=1 THEN -5 ELSE 0 END) AS BaseScore
+        (CASE WHEN f.[IsOrphan]=1 THEN -5 ELSE 0 END) AS BaseScore
 ) AS calc
 WHERE dp.type_desc IN (''SQL_USER'',''WINDOWS_USER'',''WINDOWS_GROUP'')
   AND dp.name NOT IN (''INFORMATION_SCHEMA'',''guest'',''sys'')
@@ -302,19 +296,19 @@ INSERT INTO #AccessMatrix
     [DbUser],
     [PrincipalType],
     [DefaultSchema],
-    IsSysAdmin,
+    [IsSysAdmin],
     [IsDbOwner],
     [IsDbOwnerMember],
     [HasDDL],
     [HasWrite],
-    HasRead,
-    HasExecute,
-    IsOrphaned,
-    RiskScore,
-    RiskLevel,
-    RiskFactors,
+    [HasRead],
+    [HasExecute],
+    [IsOrphan],
+    [RiskScore],
+    [RiskLevel],
+    [RiskFactors],
     [SrvPerms],
-    RecommendedAction
+    [RecommendedAction]
 )
 SELECT
     @@SERVERNAME AS [SrvName],
@@ -326,22 +320,22 @@ SELECT
     NULL AS [DbUser],
     N'NO_DB_ACCESS' AS [PrincipalType],
     NULL AS [DefaultSchema],
-    CAST(CASE WHEN ISNULL(IS_SRVROLEMEMBER('sysadmin', sp.name),0)=1 THEN 1 ELSE 0 END AS bit) AS IsSysAdmin,
+    CAST(CASE WHEN ISNULL(IS_SRVROLEMEMBER('sysadmin', sp.name),0)=1 THEN 1 ELSE 0 END AS bit) AS [IsSysAdmin],
     0 AS [IsDbOwner],
     0 AS [IsDbOwnerMember],
     0 AS [HasDDL],
     0 AS [HasWrite],
-    0 AS HasRead,
-    0 AS HasExecute,
-    0 AS IsOrphaned,
+    0 AS [HasRead],
+    0 AS [HasExecute],
+    0 AS [IsOrphan],
     CASE WHEN ISNULL(IS_SRVROLEMEMBER('sysadmin', sp.name),0)=1 THEN 100
          WHEN ISNULL(sp.is_disabled,0)=1 THEN 10
-         ELSE 20 END AS RiskScore,
+         ELSE 20 END AS [RiskScore],
     CASE WHEN ISNULL(IS_SRVROLEMEMBER('sysadmin', sp.name),0)=1 THEN 'High'
-         ELSE 'Low' END AS RiskLevel,
+         ELSE 'Low' END AS [RiskLevel],
     RTRIM(CONCAT('Login exists with no database mapping; ',
         CASE WHEN ISNULL(sp.is_disabled,0)=1 THEN 'Disabled login; ' ELSE 'Enabled login; ' END
-    )) AS RiskFactors,
+    )) AS [RiskFactors],
 
 
 	CONCAT( N'Permissions=',
@@ -374,7 +368,7 @@ SELECT
         'Clean-up: Disabled login'
     ELSE
         'Review: Login with no database access'
-END AS RecommendedAction
+END AS [RecommendedAction]
 
 FROM sys.server_principals sp
 WHERE sp.type IN ('S','U','G')
@@ -393,22 +387,22 @@ SELECT
     [LoginType],
     [LoginDisabled],
     [IsSA],
-    IsSysAdmin,
+    [IsSysAdmin],
     [SrvPerms],
     [DbUser],
     [PrincipalType],
     [DefaultSchema],
     [IsDbOwner],
     [IsDbOwnerMember],
-    IsOrphaned,
+    [IsOrphan],
     [DbPerms],
     [HasDDL],
     [HasWrite],
-    HasRead,
-    HasExecute,
-    RiskScore,
-    RiskLevel,
-    RiskFactors,
-    RecommendedAction
+    [HasRead],
+    [HasExecute],
+    [RiskScore],
+    [RiskLevel],
+    [RiskFactors],
+    [RecommendedAction]
 FROM #AccessMatrix
-ORDER BY RiskScore DESC, RiskLevel DESC, [SrvName], [DbName], [DbUser];
+ORDER BY [RiskScore] DESC, [RiskLevel] DESC, [SrvName], [DbName], [DbUser];
