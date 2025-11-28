@@ -56,8 +56,8 @@ CREATE TABLE #AccessMatrix
     RiskLevel                varchar(10),
     RiskFactors              nvarchar(4000),
 
-    GrantedServerPermissions nvarchar(max),
-    GrantedDatabasePermissions nvarchar(max),
+    GrantedServerPermissions nvarchar(50),
+    GrantedDatabasePermissions nvarchar(50),
     RecommendedAction        nvarchar(1000)
 );
 
