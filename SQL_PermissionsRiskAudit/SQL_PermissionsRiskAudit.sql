@@ -46,7 +46,7 @@ CREATE TABLE #AccessMatrix
     [HasDDL]            bit,                -- DB DDL permissions or db_ddladmin
     [HasWrite]          bit,                -- INSERT/UPDATE/DELETE or db_datawriter
     [HasRead]           bit,                -- SELECT perm or db_datareader
-    [HasExecute]        bit,                -- EXECUTE permission
+    [HasExec]           bit,                -- EXECUTE permission
     [IsOrphan]          bit,                -- DB user with no matching server login
     [RiskScore]         int,                -- Weighted risk scoring (5 - 100)
     [RiskLevel]         varchar(10),        -- High / Medium / Low
@@ -81,7 +81,7 @@ INSERT INTO #AccessMatrix
     [HasDDL],
     [HasWrite],
     [HasRead],
-    [HasExecute],
+    [HasExec],
     [IsOrphan],
     [RiskScore],
     [RiskLevel],
@@ -110,7 +110,7 @@ SELECT
     PermissionFlags.[HasDDL],
     PermissionFlags.[HasWrite],
     PermissionFlags.[HasRead],
-    PermissionFlags.[HasExecute],
+    PermissionFlags.[HasExec],
     PermissionFlags.[IsOrphan],
     CASE
         WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN 100
@@ -143,7 +143,7 @@ SELECT
         ) THEN ''db_owner/dbo; '' ELSE '''' END,
         CASE WHEN PermissionFlags.[HasDDL]=1 THEN ''DDL perms; '' ELSE '''' END,
         CASE WHEN PermissionFlags.[HasWrite]=1 THEN ''Write perms; '' ELSE '''' END,
-        CASE WHEN PermissionFlags.[HasExecute]=1 THEN ''Execute perms; '' ELSE '''' END,
+        CASE WHEN PermissionFlags.[HasExec]=1 THEN ''Execute perms; '' ELSE '''' END,
         CASE WHEN PermissionFlags.[HasRead]=1 THEN ''Read perms; '' ELSE '''' END,
         CASE WHEN dp.default_schema_name=''dbo'' THEN ''Default schema dbo; '' ELSE '''' END,
         CASE WHEN ISNULL(sp.is_disabled,0)=1 THEN ''Login disabled; '' ELSE '''' END,
@@ -238,7 +238,7 @@ CROSS APPLY (
             WHERE p.grantee_principal_id=dp.principal_id
               AND p.permission_name=''EXECUTE''
               AND p.state_desc IN (''GRANT'',''GRANT_WITH_GRANT_OPTION'')
-        ) THEN 1 ELSE 0 END AS bit) AS [HasExecute],
+        ) THEN 1 ELSE 0 END AS bit) AS [HasExec],
 
         CAST(CASE WHEN dp.type_desc IN (''SQL_USER'',''WINDOWS_USER'',''WINDOWS_GROUP'') AND (sp.sid IS NULL OR dp.sid<>sp.sid)
                   OR (dp.type_desc=''SQL_USER'' AND sp.name IS NULL) THEN 1 ELSE 0 END AS bit) AS [IsOrphan]
@@ -247,7 +247,7 @@ CROSS APPLY (
     SELECT
         (CASE WHEN PermissionFlags.[HasDDL]=1 THEN 60 ELSE 0 END) +
         (CASE WHEN PermissionFlags.[HasWrite]=1 THEN 50 ELSE 0 END) +
-        (CASE WHEN PermissionFlags.[HasExecute]=1 THEN 35 ELSE 0 END) +
+        (CASE WHEN PermissionFlags.[HasExec]=1 THEN 35 ELSE 0 END) +
         (CASE WHEN PermissionFlags.[HasRead]=1 THEN 20 ELSE 0 END) +
         (CASE WHEN dp.default_schema_name=''dbo'' THEN 10 ELSE 0 END) +
         (CASE WHEN ISNULL(sp.is_disabled,0)=1 THEN -5 ELSE 0 END) +
@@ -284,7 +284,7 @@ INSERT INTO #AccessMatrix
     [HasDDL],
     [HasWrite],
     [HasRead],
-    [HasExecute],
+    [HasExec],
     [IsOrphan],
     [RiskScore],
     [RiskLevel],
@@ -308,7 +308,7 @@ SELECT
     0 AS [HasDDL],
     0 AS [HasWrite],
     0 AS [HasRead],
-    0 AS [HasExecute],
+    0 AS [HasExec],
     0 AS [IsOrphan],
     CASE 
         WHEN ISNULL(IS_SRVROLEMEMBER('sysadmin', sp.name),0)=1 THEN 100 
@@ -381,7 +381,7 @@ SELECT
     [HasDDL],
     [HasWrite],
     [HasRead],
-    [HasExecute],
+    [HasExec],
     [RiskScore],
     [RiskLevel],
     [RiskFactors],
