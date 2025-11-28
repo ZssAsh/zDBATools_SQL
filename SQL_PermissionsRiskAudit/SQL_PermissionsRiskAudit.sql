@@ -107,13 +107,11 @@ SELECT
         JOIN sys.database_principals r ON r.principal_id=drm.role_principal_id
         WHERE r.name=''db_owner'' AND drm.member_principal_id=dp.principal_id
     ) THEN 1 ELSE 0 END AS bit) AS [IsDbOwnerMember],
-
-    f.[HasDDL],
-    f.[HasWrite],
-    f.[HasRead],
-    f.[HasExecute],
-    f.[IsOrphan],
-
+    PermissionFlags.[HasDDL],
+    PermissionFlags.[HasWrite],
+    PermissionFlags.[HasRead],
+    PermissionFlags.[HasExecute],
+    PermissionFlags.[IsOrphan],
     CASE
         WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN 100
         WHEN dp.name=''dbo'' OR EXISTS(
@@ -121,23 +119,19 @@ SELECT
             JOIN sys.database_principals r ON r.principal_id=drm.role_principal_id
             WHERE r.name=''db_owner'' AND drm.member_principal_id=dp.principal_id
         ) THEN 100
-        ELSE CASE WHEN calc.BaseScore<5 THEN 5 WHEN calc.BaseScore>100 THEN 100 ELSE calc.BaseScore END
+        ELSE CASE WHEN PrivilegeScore.BaseScore<5 THEN 5 WHEN PrivilegeScore.BaseScore>100 THEN 100 ELSE PrivilegeScore.BaseScore END
     END AS [RiskScore],
-
     CASE
-    WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN ''High''
-    WHEN dp.name=''dbo'' OR EXISTS(
-        SELECT 1 FROM sys.database_role_members drm
-        JOIN sys.database_principals r ON r.principal_id=drm.role_principal_id
-        WHERE r.name=''db_owner'' AND drm.member_principal_id=dp.principal_id
-    ) THEN ''High''
-    WHEN sp.sid = 0x01 AND sp.name <> ''sa'' AND ISNULL(sp.is_disabled,0)=1 THEN ''Low''  -- Secured SA
-    WHEN calc.BaseScore>=100 THEN ''High''
-    WHEN calc.BaseScore>=60 THEN ''Medium''
-    ELSE ''Low''
-END AS [RiskLevel],
-
-
+        WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN ''High''
+        WHEN dp.name=''dbo'' OR EXISTS(
+            SELECT 1 FROM sys.database_role_members drm
+            JOIN sys.database_principals r ON r.principal_id=drm.role_principal_id
+            WHERE r.name=''db_owner'' AND drm.member_principal_id=dp.principal_id) THEN ''High''
+        WHEN sp.sid = 0x01 AND sp.name <> ''sa'' AND ISNULL(sp.is_disabled,0)=1 THEN ''Low''  -- Secured SA
+        WHEN PrivilegeScore.BaseScore>=100 THEN ''High''
+        WHEN PrivilegeScore.BaseScore>=60 THEN ''Medium''
+        ELSE ''Low''
+    END AS [RiskLevel],
     RTRIM(CONCAT(
         CASE WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 THEN ''SysAdmin; '' ELSE '''' END,
         CASE WHEN sp.sid=0x01 AND sp.name=''sa'' THEN ''SA login not renamed; '' ELSE '''' END,
@@ -147,70 +141,58 @@ END AS [RiskLevel],
             JOIN sys.database_principals r ON r.principal_id=drm.role_principal_id
             WHERE r.name=''db_owner'' AND drm.member_principal_id=dp.principal_id
         ) THEN ''db_owner/dbo; '' ELSE '''' END,
-        CASE WHEN f.[HasDDL]=1 THEN ''DDL perms; '' ELSE '''' END,
-        CASE WHEN f.[HasWrite]=1 THEN ''Write perms; '' ELSE '''' END,
-        CASE WHEN f.[HasExecute]=1 THEN ''Execute perms; '' ELSE '''' END,
-        CASE WHEN f.[HasRead]=1 THEN ''Read perms; '' ELSE '''' END,
+        CASE WHEN PermissionFlags.[HasDDL]=1 THEN ''DDL perms; '' ELSE '''' END,
+        CASE WHEN PermissionFlags.[HasWrite]=1 THEN ''Write perms; '' ELSE '''' END,
+        CASE WHEN PermissionFlags.[HasExecute]=1 THEN ''Execute perms; '' ELSE '''' END,
+        CASE WHEN PermissionFlags.[HasRead]=1 THEN ''Read perms; '' ELSE '''' END,
         CASE WHEN dp.default_schema_name=''dbo'' THEN ''Default schema dbo; '' ELSE '''' END,
         CASE WHEN ISNULL(sp.is_disabled,0)=1 THEN ''Login disabled; '' ELSE '''' END,
-        CASE WHEN f.[IsOrphan]=1 THEN ''Orphaned user; '' ELSE '''' END
-    )) AS [RiskFactors],
-
+        CASE WHEN PermissionFlags.[IsOrphan]=1 THEN ''Orphaned user; '' ELSE '''' END)) 
+    AS [RiskFactors],
     -- Server permissions + roles
-	CONCAT( N''Permissions='',
-		CAST((
-			SELECT COUNT(*)
-			FROM sys.server_permissions p
-			WHERE p.grantee_principal_id = sp.principal_id
-			  AND p.state_desc IN (N''GRANT'', N''GRANT_WITH_GRANT_OPTION'')
-		) AS NVARCHAR(20)),
-		N''; Roles='',
-		CAST((
+	CONCAT( 
+        N''Permissions='',CAST((
+            SELECT COUNT(*)
+		    FROM sys.server_permissions p
+		    WHERE p.grantee_principal_id = sp.principal_id
+		        AND p.state_desc IN (N''GRANT'', N''GRANT_WITH_GRANT_OPTION'')) AS NVARCHAR(20)),
+		N''; Roles='',CAST((
 			SELECT COUNT(*)
 			FROM sys.server_role_members srm
-			WHERE srm.member_principal_id = sp.principal_id
-		) AS NVARCHAR(20))
-	) AS [SrvPerms],
-
+			WHERE srm.member_principal_id = sp.principal_id) AS NVARCHAR(20))) 
+    AS [SrvPerms],
     -- Database permissions + role memberships
-    
-CONCAT(
-    N''DB Perms='',
-    CAST((
-        SELECT COUNT(*)
-        FROM sys.database_permissions p
-        WHERE p.grantee_principal_id = dp.principal_id
-          AND p.state_desc IN (N''GRANT'', N''GRANT_WITH_GRANT_OPTION'')
-    ) AS NVARCHAR(20)),
-    N''; DB Roles='',
-    CAST((
-        SELECT COUNT(*)
-        FROM sys.database_role_members drm
-        WHERE drm.member_principal_id = dp.principal_id
-    ) AS NVARCHAR(20))
-) AS [DbPerms],
-
+    CONCAT(
+        N''DB Perms='',CAST((
+            SELECT COUNT(*)
+            FROM sys.database_permissions p
+            WHERE p.grantee_principal_id = dp.principal_id
+                AND p.state_desc IN (N''GRANT'', N''GRANT_WITH_GRANT_OPTION'')) AS NVARCHAR(20)),
+        N''; DB Roles='',CAST((
+            SELECT COUNT(*)
+            FROM sys.database_role_members drm
+            WHERE drm.member_principal_id = dp.principal_id) AS NVARCHAR(20))) 
+    AS [DbPerms],
     CASE
-    -- SA not secured (not renamed OR not disabled)
-    WHEN sp.sid = 0x01 AND (sp.name = ''sa'' OR ISNULL(sp.is_disabled,0)=0) THEN
-        ''Clean-up: Rename and/or disable SA login''
-    -- SA secured (renamed AND disabled)
-    WHEN sp.sid = 0x01 AND sp.name <> ''sa'' AND ISNULL(sp.is_disabled,0)=1 THEN
-        ''No immediate risk: SA login secured (renamed and disabled)''
-    -- Other high-privilege accounts
-    WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1
-      OR dp.name=''dbo''
-      OR EXISTS(
-          SELECT 1 FROM sys.database_role_members drm
-          JOIN sys.database_principals r ON r.principal_id=drm.role_principal_id
-          WHERE r.name=''db_owner'' AND drm.member_principal_id=dp.principal_id
-      ) THEN ''Address Immediately: Highly privileged account (SysAdmin or DB Owner).''
-    -- Disabled or orphaned accounts
-    WHEN ISNULL(sp.is_disabled,0)=1 OR f.[IsOrphan]=1 THEN
-         ''Clean-up: Disabled or orphaned account.''
-    ELSE ''Review: Account has database permissions.''
-END AS [RecommendedAction]
-
+        -- SA not secured (not renamed OR not disabled)
+        WHEN sp.sid = 0x01 AND (sp.name = ''sa'' OR ISNULL(sp.is_disabled,0)=0) 
+        THEN ''Clean-up: Rename and/or disable SA login''
+        -- SA secured (renamed AND disabled)
+        WHEN sp.sid = 0x01 AND sp.name <> ''sa'' AND ISNULL(sp.is_disabled,0)=1 
+        THEN ''No immediate risk: SA login secured (renamed and disabled)''
+        -- Other high-privilege accounts
+        WHEN ISNULL(IS_SRVROLEMEMBER(''sysadmin'', sp.name),0)=1 OR dp.name=''dbo''
+            OR EXISTS(
+                SELECT 1 
+                FROM sys.database_role_members drm
+                JOIN sys.database_principals r ON r.principal_id=drm.role_principal_id
+                WHERE r.name=''db_owner'' AND drm.member_principal_id=dp.principal_id) 
+        THEN ''Address Immediately: Highly privileged account (SysAdmin or DB Owner).''
+        -- Disabled or orphaned accounts
+        WHEN ISNULL(sp.is_disabled,0)=1 OR PermissionFlags.[IsOrphan]=1 
+        THEN ''Clean-up: Disabled or orphaned account.''
+        ELSE ''Review: Account has database permissions.'' 
+    END AS [RecommendedAction]
 FROM sys.database_principals dp
 LEFT JOIN sys.server_principals sp ON dp.sid=sp.sid
 CROSS APPLY (
@@ -260,22 +242,22 @@ CROSS APPLY (
 
         CAST(CASE WHEN dp.type_desc IN (''SQL_USER'',''WINDOWS_USER'',''WINDOWS_GROUP'') AND (sp.sid IS NULL OR dp.sid<>sp.sid)
                   OR (dp.type_desc=''SQL_USER'' AND sp.name IS NULL) THEN 1 ELSE 0 END AS bit) AS [IsOrphan]
-) AS f
+) AS PermissionFlags
 CROSS APPLY (
     SELECT
-        (CASE WHEN f.[HasDDL]=1 THEN 60 ELSE 0 END) +
-        (CASE WHEN f.[HasWrite]=1 THEN 50 ELSE 0 END) +
-        (CASE WHEN f.[HasExecute]=1 THEN 35 ELSE 0 END) +
-        (CASE WHEN f.[HasRead]=1 THEN 20 ELSE 0 END) +
+        (CASE WHEN PermissionFlags.[HasDDL]=1 THEN 60 ELSE 0 END) +
+        (CASE WHEN PermissionFlags.[HasWrite]=1 THEN 50 ELSE 0 END) +
+        (CASE WHEN PermissionFlags.[HasExecute]=1 THEN 35 ELSE 0 END) +
+        (CASE WHEN PermissionFlags.[HasRead]=1 THEN 20 ELSE 0 END) +
         (CASE WHEN dp.default_schema_name=''dbo'' THEN 10 ELSE 0 END) +
         (CASE WHEN ISNULL(sp.is_disabled,0)=1 THEN -5 ELSE 0 END) +
-        (CASE WHEN f.[IsOrphan]=1 THEN -5 ELSE 0 END) AS BaseScore
-) AS calc
+        (CASE WHEN PermissionFlags.[IsOrphan]=1 THEN -5 ELSE 0 END) AS BaseScore
+) AS PrivilegeScore
 WHERE dp.type_desc IN (''SQL_USER'',''WINDOWS_USER'',''WINDOWS_GROUP'')
-  AND dp.name NOT IN (''INFORMATION_SCHEMA'',''guest'',''sys'')
-  AND dp.name NOT LIKE ''NT SERVICE\%''
-  AND sp.name NOT LIKE ''NT AUTHORITY\%''
-  AND (sp.name IS NULL OR sp.name NOT LIKE ''##%##'');
+    AND dp.name NOT IN (''INFORMATION_SCHEMA'',''guest'',''sys'')
+    AND dp.name NOT LIKE ''NT SERVICE\%''
+    AND sp.name NOT LIKE ''NT AUTHORITY\%''
+    AND (sp.name IS NULL OR sp.name NOT LIKE ''##%##'');
 '
 FROM sys.databases d
 WHERE d.state=0 AND d.name<>'tempdb';
@@ -328,55 +310,55 @@ SELECT
     0 AS [HasRead],
     0 AS [HasExecute],
     0 AS [IsOrphan],
-    CASE WHEN ISNULL(IS_SRVROLEMEMBER('sysadmin', sp.name),0)=1 THEN 100
-         WHEN ISNULL(sp.is_disabled,0)=1 THEN 10
-         ELSE 20 END AS [RiskScore],
+    CASE 
+        WHEN ISNULL(IS_SRVROLEMEMBER('sysadmin', sp.name),0)=1 THEN 100 
+        WHEN ISNULL(sp.is_disabled,0)=1 THEN 10 
+        ELSE 20 
+    END AS [RiskScore],
     CASE WHEN ISNULL(IS_SRVROLEMEMBER('sysadmin', sp.name),0)=1 THEN 'High'
-         ELSE 'Low' END AS [RiskLevel],
-    RTRIM(CONCAT('Login exists with no database mapping; ',
-        CASE WHEN ISNULL(sp.is_disabled,0)=1 THEN 'Disabled login; ' ELSE 'Enabled login; ' END
-    )) AS [RiskFactors],
-
-
-	CONCAT( N'Permissions=',
-		CAST((
+         ELSE 'Low' 
+    END AS [RiskLevel],
+    RTRIM(CONCAT(
+        'Login exists with no database mapping; ',
+        CASE WHEN ISNULL(sp.is_disabled,0)=1 
+            THEN 'Disabled login; ' 
+            ELSE 'Enabled login; ' 
+        END )) 
+    AS [RiskFactors],
+	CONCAT( 
+        N'Permissions=',CAST((
 			SELECT COUNT(*)
-			FROM sys.server_permissions p
-			WHERE p.grantee_principal_id = sp.principal_id
-			  AND p.state_desc IN (N'GRANT', N'GRANT_WITH_GRANT_OPTION')
-		) AS NVARCHAR(20)),
-		N'; Roles=',
-		CAST((
+		    FROM sys.server_permissions p
+		    WHERE 
+                    p.grantee_principal_id = sp.principal_id
+		        AND p.state_desc IN (N'GRANT', N'GRANT_WITH_GRANT_OPTION')) AS NVARCHAR(20)),
+		N'; Roles=',CAST((
 			SELECT COUNT(*)
 			FROM sys.server_role_members srm
-			WHERE srm.member_principal_id = sp.principal_id
-		) AS NVARCHAR(20))
-	) AS [SrvPerms],
-
+			WHERE srm.member_principal_id = sp.principal_id) AS NVARCHAR(20))) 
+    AS [SrvPerms],
     CASE
-    -- SA not secured
-    WHEN sp.sid = 0x01 AND (sp.name = 'sa' OR ISNULL(sp.is_disabled,0)=0) THEN
-        'Clean-up: Rename and/or disable SA login'
-    -- SA secured
-    WHEN sp.sid = 0x01 AND sp.name <> 'sa' AND ISNULL(sp.is_disabled,0)=1 THEN
-        'No immediate risk: SA login secured (renamed and disabled)'
-    -- Other high-privilege accounts
-    WHEN ISNULL(IS_SRVROLEMEMBER('sysadmin', sp.name),0)=1 THEN
-        'Address Immediately: SysAdmin login'
-    -- Disabled accounts
-    WHEN ISNULL(sp.is_disabled,0)=1 THEN
-        'Clean-up: Disabled login'
-    ELSE
-        'Review: Login with no database access'
-END AS [RecommendedAction]
-
+        -- SA not secured
+        WHEN sp.sid = 0x01 AND (sp.name = 'sa' OR ISNULL(sp.is_disabled,0)=0) 
+        THEN 'Clean-up: Rename and/or disable SA login'
+        -- SA secured
+        WHEN sp.sid = 0x01 AND sp.name <> 'sa' AND ISNULL(sp.is_disabled,0)=1 
+        THEN 'No immediate risk: SA login secured (renamed and disabled)'
+        -- Other high-privilege accounts
+        WHEN ISNULL(IS_SRVROLEMEMBER('sysadmin', sp.name),0)=1 
+        THEN 'Address Immediately: SysAdmin login'
+        -- Disabled accounts
+        WHEN ISNULL(sp.is_disabled,0)=1 
+        THEN 'Clean-up: Disabled login'
+        ELSE 'Review: Login with no database access'
+    END AS [RecommendedAction]
 FROM sys.server_principals sp
-WHERE sp.type IN ('S','U','G')
-  AND sp.name NOT LIKE '##%##'
-  AND sp.name NOT LIKE 'NT SERVICE\%'
-  AND sp.name NOT LIKE 'NT AUTHORITY\%'
-  AND NOT EXISTS (SELECT 1 FROM #AccessMatrix a WHERE a.[Login]=sp.name);
-
+WHERE 
+        sp.type IN ('S','U','G')            -- Include SQL logins, Windows logins, and Windows groups only
+    AND sp.name NOT LIKE '##%##'            -- Exclude system-generated internal logins
+    AND sp.name NOT LIKE 'NT SERVICE\%'     -- Exclude local service accounts
+    AND sp.name NOT LIKE 'NT AUTHORITY\%'   -- Exclude built-in Windows accounts
+    AND NOT EXISTS (SELECT 1 FROM #AccessMatrix a WHERE a.[Login]=sp.name); -- Skip logins already captured at DB level
 -- ===============================================
 -- Final consolidated report
 -- ===============================================
