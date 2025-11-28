@@ -151,27 +151,28 @@ SELECT
     AS [RiskFactors],
     -- Server permissions + roles
 	CONCAT( 
-        N''Permissions='',CAST((
+    	N''Roles='',CAST((
+			SELECT COUNT(*)
+			FROM sys.server_role_members srm
+			WHERE srm.member_principal_id = sp.principal_id) AS NVARCHAR(20)),
+        N''; Permissions='',CAST((
             SELECT COUNT(*)
 		    FROM sys.server_permissions p
 		    WHERE p.grantee_principal_id = sp.principal_id
-		        AND p.state_desc IN (N''GRANT'', N''GRANT_WITH_GRANT_OPTION'')) AS NVARCHAR(20)),
-		N''; Roles='',CAST((
-			SELECT COUNT(*)
-			FROM sys.server_role_members srm
-			WHERE srm.member_principal_id = sp.principal_id) AS NVARCHAR(20))) 
+		        AND p.state_desc IN (N''GRANT'', N''GRANT_WITH_GRANT_OPTION'')) AS NVARCHAR(20)))
+
     AS [SrvPerms],
     -- Database permissions + role memberships
     CONCAT(
-        N''DB Perms='',CAST((
+        N''DB Roles='',CAST((
+            SELECT COUNT(*)
+            FROM sys.database_role_members drm
+            WHERE drm.member_principal_id = dp.principal_id) AS NVARCHAR(20)),
+        N''; DB Perms='',CAST((
             SELECT COUNT(*)
             FROM sys.database_permissions p
             WHERE p.grantee_principal_id = dp.principal_id
-                AND p.state_desc IN (N''GRANT'', N''GRANT_WITH_GRANT_OPTION'')) AS NVARCHAR(20)),
-        N''; DB Roles='',CAST((
-            SELECT COUNT(*)
-            FROM sys.database_role_members drm
-            WHERE drm.member_principal_id = dp.principal_id) AS NVARCHAR(20))) 
+                AND p.state_desc IN (N''GRANT'', N''GRANT_WITH_GRANT_OPTION'')) AS NVARCHAR(20)))
     AS [DbPerms],
     CASE
         -- SA not secured (not renamed OR not disabled)
@@ -326,16 +327,16 @@ SELECT
         END )) 
     AS [RiskFactors],
 	CONCAT( 
-        N'Permissions=',CAST((
+        N'Roles=',CAST((
+			SELECT COUNT(*)
+			FROM sys.server_role_members srm
+			WHERE srm.member_principal_id = sp.principal_id) AS NVARCHAR(20)),
+        N'; Permissions=',CAST((
 			SELECT COUNT(*)
 		    FROM sys.server_permissions p
 		    WHERE 
                     p.grantee_principal_id = sp.principal_id
-		        AND p.state_desc IN (N'GRANT', N'GRANT_WITH_GRANT_OPTION')) AS NVARCHAR(20)),
-		N'; Roles=',CAST((
-			SELECT COUNT(*)
-			FROM sys.server_role_members srm
-			WHERE srm.member_principal_id = sp.principal_id) AS NVARCHAR(20))) 
+		        AND p.state_desc IN (N'GRANT', N'GRANT_WITH_GRANT_OPTION')) AS NVARCHAR(20)))
     AS [SrvPerms],
     CASE
         -- SA not secured
