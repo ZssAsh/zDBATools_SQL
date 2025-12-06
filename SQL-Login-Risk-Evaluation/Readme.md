@@ -142,7 +142,7 @@ Manual inspection is time‑consuming. This script automates everything.
 ---
 
 ## 🧭 Roadmap
-
+* Remedianion Actions
 * JSON output option
 * Power BI Risk Dashboard template
 * Automated historical baselining
