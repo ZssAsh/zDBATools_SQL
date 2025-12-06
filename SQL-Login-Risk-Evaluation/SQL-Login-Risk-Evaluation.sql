@@ -322,11 +322,7 @@ BEGIN
             'SERVER',						-- Securable class
             e.permission_name,				-- Effective permission
             ISNULL(d.WithGrantOption,0),	-- GRANT OPTION flag if exists
-			CASE 
-				WHEN d.permission_name IS NOT NULL 
-				THEN 'Direct' 
-				ELSE 'Inherited' 
-			END
+			CASE WHEN d.permission_name IS NOT NULL THEN 'Direct' ELSE 'Inherited' END
 		FROM #LoginEffectiveServerPerms e
 		LEFT JOIN #LoginDirectServerPerms d
 			ON e.permission_name COLLATE DATABASE_DEFAULT = d.permission_name COLLATE DATABASE_DEFAULT;
@@ -386,12 +382,13 @@ WITH AccessRightsRisk AS
 			THEN 100 -- change to use #AttackSurfaceRiskWeights.SysAdmin
 			ELSE SUM(ISNULL(PR.RiskPoints,0))
 		END AS RiskScore,
-		SUM
+		SUM 
 		(
-			CASE WHEN LSP.WithGrantOption=1 
-			THEN ISNULL(PR.RiskPoints,0)*ISNULL(sw.RiskWeight,0) 
-			ELSE 0 
-			END
+			CASE 
+				WHEN LSP.WithGrantOption=1 
+				THEN ISNULL(PR.RiskPoints,0)*ISNULL(sw.RiskWeight,0) 
+				ELSE 0 
+			END 
 		) AS GrantOptionRisk
 	FROM #LoginProfile LSP
 		LEFT JOIN #AccessRightsRisks PR
@@ -613,11 +610,7 @@ SaNotRenamed As
 	WHERE 
 			SUSER_SID(LSP.LoginName) = 0x01 
 		AND SR.Category ='SaNotRenamed' 
-		AND SR.CheckValue = CASE 
-			WHEN LOWER(LSP.LoginName) = 'sa' 
-			THEN 'YES' 
-			ELSE 'NO' 
-		END
+		AND SR.CheckValue = CASE WHEN LOWER(LSP.LoginName) = 'sa' THEN 'YES' ELSE 'NO' END
 	GROUP BY LSP.LoginName
 ),
 
@@ -645,10 +638,8 @@ PasswordCheckRisk AS
 		MAX
 		(
 			CASE 
-				WHEN PWDCOMPARE('', sl.password_hash) = 1 
-				THEN SR1.RiskPoints
-				WHEN PWDCOMPARE(sl.name, sl.password_hash) = 1 
-				THEN SR2.RiskPoints
+				WHEN PWDCOMPARE('', sl.password_hash) = 1		THEN SR1.RiskPoints
+				WHEN PWDCOMPARE(sl.name, sl.password_hash) = 1	THEN SR2.RiskPoints
 			END
 		) AS RiskPoints
 	FROM #LoginProfile LSP 
@@ -699,11 +690,7 @@ SELECT
 		ISNULL(SEC_SLT.RiskPoints,0)
 		+ ISNULL(SEC_SPC.RiskPoints,0)
 		+ ISNULL(SEC_ECR.RiskPoints,0)
-		+ CASE 
-			WHEN ACC_RSK.IsSA =1
-			THEN ISNULL(SEC_SSE.RiskPoints,0)
-			ELSE ISNULL(SEC_SDC.RiskPoints,0)
-		END
+		+ CASE WHEN ACC_RSK.IsSA =1 THEN ISNULL(SEC_SSE.RiskPoints,0) ELSE ISNULL(SEC_SDC.RiskPoints,0) END
 		+ ISNULL(SEC_SSN.RiskPoints,0)
 		+ ISNULL(SEC_SLR.RiskPoints,0)
 		+ ISNULL(SEC_SPS.RiskPoints,0) 
@@ -724,372 +711,373 @@ SELECT
 		+ ISNULL(SEC_SLT.RiskPoints,0)
 		+ ISNULL(SEC_SPC.RiskPoints,0)
 		+ ISNULL(SEC_ECR.RiskPoints,0)
-		+ CASE WHEN ACC_RSK.IsSA =1
-			THEN ISNULL(SEC_SSE.RiskPoints,0)
-			ELSE ISNULL(SEC_SDC.RiskPoints,0)
-		END
+		+ CASE WHEN ACC_RSK.IsSA =1 THEN ISNULL(SEC_SSE.RiskPoints,0) ELSE ISNULL(SEC_SDC.RiskPoints,0) END
 		+ ISNULL(SEC_SSN.RiskPoints,0) 
 		+ ISNULL(SEC_SPS.RiskPoints,0)
 	) AS Overall_RiskScore,
 
---==============================================================================
---  SECURITY REPORT XML OUTPUT
---  This section assembles the final XML for a single login (LP.LoginName)
---  by combining:
---      • Access Rights Risk (permissions + roles)
---      • Attack Surface Risk (jobs, proxies, credentials, impersonation, etc.)
---      • Security Risk (login configuration + policy compliance)
---      • Security Remediation (why risky + recommended fixes)
---
---  All inner SELECT blocks use FOR XML PATH() to build nested XML structures.
---==============================================================================
+	--==============================================================================
+	--  SECURITY REPORT XML OUTPUT
+	--  This section assembles the final XML for a single login (LP.LoginName)
+	--  by combining:
+	--      • Access Rights Risk (permissions + roles)
+	--      • Attack Surface Risk (jobs, proxies, credentials, impersonation, etc.)
+	--      • Security Risk (login configuration + policy compliance)
+	--      • Security Remediation (why risky + recommended fixes)
+	--
+	--  All inner SELECT blocks use FOR XML PATH() to build nested XML structures.
+	--==============================================================================
 
-(
-    SELECT
-        ----------------------------------------------------------------------
-        -- TOTAL ACCESS RIGHTS RISK (SUM OF PERMISSION-LEVEL SCORES)
-        ----------------------------------------------------------------------
-        ACC_RSK.RiskScore AS [Totals/@AccessRights],
+	(
+		SELECT
+			----------------------------------------------------------------------
+			-- TOTAL ACCESS RIGHTS RISK (SUM OF PERMISSION-LEVEL SCORES)
+			----------------------------------------------------------------------
+			ACC_RSK.RiskScore AS [Totals/@AccessRights],
 
-        ----------------------------------------------------------------------
-        -- TOTAL ATTACK SURFACE RISK
-        -- Summed across all attack vectors: job ownership, proxies, credentials,
-        -- impersonation, linked servers, orphan logins, invalid default DB,
-        -- direct grants, grant options.
-        ----------------------------------------------------------------------
-        (
-              ISNULL(ACC_RSK.GrantOptionRisk, 0)
-            + ISNULL(SUR_OJR.JobRisk, 0)
-            + ISNULL(SUR_OPR.ProxyRisk, 0)
-            + ISNULL(SUR_OCR.CredentialRisk, 0)
-            + ISNULL(SUR_IMR.ImpersonationRisk, 0)
-            + ISNULL(SUR_LSR.LinkedServerRisk, 0)
-            + ISNULL(SUR_OLR.OrphanLoginRisk, 0)
-            + ISNULL(SUR_DDR.DefaultDBRisk, 0)
-            + ISNULL(SUR_DPR.DirectGrantRisk, 0)
-        ) AS [Totals/@SurfaceRisk],
+			----------------------------------------------------------------------
+			-- TOTAL ATTACK SURFACE RISK
+			-- Summed across all attack vectors: job ownership, proxies, credentials,
+			-- impersonation, linked servers, orphan logins, invalid default DB,
+			-- direct grants, grant options.
+			----------------------------------------------------------------------
+			(
+				  ISNULL(ACC_RSK.GrantOptionRisk, 0)
+				+ ISNULL(SUR_OJR.JobRisk, 0)
+				+ ISNULL(SUR_OPR.ProxyRisk, 0)
+				+ ISNULL(SUR_OCR.CredentialRisk, 0)
+				+ ISNULL(SUR_IMR.ImpersonationRisk, 0)
+				+ ISNULL(SUR_LSR.LinkedServerRisk, 0)
+				+ ISNULL(SUR_OLR.OrphanLoginRisk, 0)
+				+ ISNULL(SUR_DDR.DefaultDBRisk, 0)
+				+ ISNULL(SUR_DPR.DirectGrantRisk, 0)
+			) AS [Totals/@SurfaceRisk],
 
-        ----------------------------------------------------------------------
-        -- TOTAL SECURITY CONFIGURATION RISK
-        -- Includes password policy, login type, expiration checks,
-        -- disabled logins, stale logins, and whether 'sa' is renamed.
-        ----------------------------------------------------------------------
-        (
-              ISNULL(SEC_SLT.RiskPoints, 0)
-            + ISNULL(SEC_SPC.RiskPoints, 0)
-            + ISNULL(SEC_ECR.RiskPoints, 0)
+			----------------------------------------------------------------------
+			-- TOTAL SECURITY CONFIGURATION RISK
+			-- Includes password policy, login type, expiration checks,
+			-- disabled logins, stale logins, and whether 'sa' is renamed.
+			----------------------------------------------------------------------
+			(
+				  ISNULL(SEC_SLT.RiskPoints, 0)
+				+ ISNULL(SEC_SPC.RiskPoints, 0)
+				+ ISNULL(SEC_ECR.RiskPoints, 0)
 
-            -- Special SA-case override:
-            -- If login is 'sa', use BuiltinSA risk weight instead of LoginDisabled.
-            + CASE 
-                WHEN ACC_RSK.IsSA = 1
-                    THEN ISNULL(SEC_SSE.RiskPoints, 0)
-                ELSE ISNULL(SEC_SDC.RiskPoints, 0)
-              END
+				-- Special SA-case override:
+				-- If login is 'sa', use BuiltinSA risk weight instead of LoginDisabled.
+				+ CASE WHEN ACC_RSK.IsSA = 1 THEN ISNULL(SEC_SSE.RiskPoints, 0) ELSE ISNULL(SEC_SDC.RiskPoints, 0) END
+				+ ISNULL(SEC_SSN.RiskPoints, 0)
+				+ ISNULL(SEC_SLR.RiskPoints, 0)
+			) AS [Totals/@SecurityRisk],
 
-            + ISNULL(SEC_SSN.RiskPoints, 0)
-            + ISNULL(SEC_SLR.RiskPoints, 0)
-        ) AS [Totals/@SecurityRisk],
+			----------------------------------------------------------------------
+			-- OVERALL RISK SCORE
+			-- Sum of: AccessRights + AttackSurface + SecurityRisk
+			----------------------------------------------------------------------
+			(
+				  ACC_RSK.RiskScore
+				+ ISNULL(ACC_RSK.GrantOptionRisk, 0)
+				+ ISNULL(SUR_OJR.JobRisk, 0)
+				+ ISNULL(SUR_OPR.ProxyRisk, 0)
+				+ ISNULL(SUR_OCR.CredentialRisk, 0)
+				+ ISNULL(SUR_IMR.ImpersonationRisk, 0)
+				+ ISNULL(SUR_LSR.LinkedServerRisk, 0)
+				+ ISNULL(SUR_OLR.OrphanLoginRisk, 0)
+				+ ISNULL(SUR_DDR.DefaultDBRisk, 0)
+				+ ISNULL(SUR_DPR.DirectGrantRisk, 0)
+				+ ISNULL(SEC_SLT.RiskPoints, 0)
+				+ ISNULL(SEC_SPC.RiskPoints, 0)
+				+ ISNULL(SEC_ECR.RiskPoints, 0)
+				+ CASE WHEN ACC_RSK.IsSA = 1 THEN ISNULL(SEC_SSE.RiskPoints, 0) ELSE ISNULL(SEC_SDC.RiskPoints, 0) END
+				+ ISNULL(SEC_SSN.RiskPoints, 0)
+			) AS [Totals/@Overall],
 
-        ----------------------------------------------------------------------
-        -- OVERALL RISK SCORE
-        -- Sum of: AccessRights + AttackSurface + SecurityRisk
-        ----------------------------------------------------------------------
-        (
-              ACC_RSK.RiskScore
-            + ISNULL(ACC_RSK.GrantOptionRisk, 0)
-            + ISNULL(SUR_OJR.JobRisk, 0)
-            + ISNULL(SUR_OPR.ProxyRisk, 0)
-            + ISNULL(SUR_OCR.CredentialRisk, 0)
-            + ISNULL(SUR_IMR.ImpersonationRisk, 0)
-            + ISNULL(SUR_LSR.LinkedServerRisk, 0)
-            + ISNULL(SUR_OLR.OrphanLoginRisk, 0)
-            + ISNULL(SUR_DDR.DefaultDBRisk, 0)
-            + ISNULL(SUR_DPR.DirectGrantRisk, 0)
-            + ISNULL(SEC_SLT.RiskPoints, 0)
-            + ISNULL(SEC_SPC.RiskPoints, 0)
-            + ISNULL(SEC_ECR.RiskPoints, 0)
-            + CASE 
-                WHEN ACC_RSK.IsSA = 1
-                    THEN ISNULL(SEC_SSE.RiskPoints, 0)
-                ELSE ISNULL(SEC_SDC.RiskPoints, 0)
-              END
-            + ISNULL(SEC_SSN.RiskPoints, 0)
-        ) AS [Totals/@Overall],
+			----------------------------------------------------------------------
+			-- ACCESS RIGHTS SECTION
+			-- Includes:
+			--      • Roles assigned to login
+			--      • Individual permissions with risk points
+			----------------------------------------------------------------------
+			(
+				SELECT
+					-- Roles
+					(
+						SELECT
+							sr.Role AS [@Name],
+							CASE WHEN sp.is_fixed_role = 1 THEN 1 ELSE 0 END AS [@IsSystemRole]
+						FROM #ServerRoles sr
+						JOIN sys.server_principals sp ON sr.Role = sp.name
+						WHERE sr.LoginName = LP.LoginName
+						FOR XML PATH('Role'), TYPE
+					) AS [Roles],
 
-        ----------------------------------------------------------------------
-        -- ACCESS RIGHTS SECTION
-        -- Includes:
-        --      • Roles assigned to login
-        --      • Individual permissions with risk points
-        ----------------------------------------------------------------------
-        (
-            SELECT
-                -- Roles
-                (
-                    SELECT
-                        sr.Role AS [@Name],
-                        CASE WHEN sp.is_fixed_role = 1 THEN 1 ELSE 0 END AS [@IsSystemRole]
-                    FROM #ServerRoles sr
-                    JOIN sys.server_principals sp ON sr.Role = sp.name
-                    WHERE sr.LoginName = LP.LoginName
-                    FOR XML PATH('Role'), TYPE
-                ) AS [Roles],
+					-- Permissions
+					(
+						SELECT
+							LSP.PermissionName AS [@Name],
+							ISNULL(PR.RiskPoints, 0) AS [@RiskPoints]
+						FROM #LoginProfile LSP
+						LEFT JOIN #AccessRightsRisks PR 
+							ON LSP.PermissionName = PR.PermissionName
+						WHERE LSP.LoginName = LP.LoginName
+						FOR XML PATH('Permission'), TYPE
+					) AS [Permissions]
 
-                -- Permissions
-                (
-                    SELECT
-                        LSP.PermissionName AS [@Name],
-                        ISNULL(PR.RiskPoints, 0) AS [@RiskPoints]
-                    FROM #LoginProfile LSP
-                    LEFT JOIN #AccessRightsRisks PR 
-                        ON LSP.PermissionName = PR.PermissionName
-                    WHERE LSP.LoginName = LP.LoginName
-                    FOR XML PATH('Permission'), TYPE
-                ) AS [Permissions]
+				FOR XML PATH('AccessRightsRisks'), TYPE
+			),
 
-            FOR XML PATH('AccessRightsRisks'), TYPE
-        ),
+			----------------------------------------------------------------------
+			-- ATTACK SURFACE RISK SECTION
+			-- Includes ALL attack vectors:
+			--   Direct / WithGrant permissions, Jobs, Proxies, Credentials,
+			--   Impersonation, Linked Servers, Orphan Logins, Invalid Default DB
+			----------------------------------------------------------------------
+			(
+				SELECT
+					--------------------------------------------------------------
+					-- DIRECT + WITH GRANT PERMISSIONS
+					--------------------------------------------------------------
+					(
+						SELECT
+							(
+								-- Direct permissions
+								SELECT
+									LSP.PermissionName AS [@Name],
+									CASE WHEN LSP.PermissionName <> 'CONNECT SQL'THEN ISNULL(PR.RiskPoints, 0) * ISNULL(sw.RiskWeight, 0) END AS [@RiskPoints]
+								FROM #LoginProfile LSP
+								LEFT JOIN #AccessRightsRisks PR
+									ON LSP.PermissionName = PR.PermissionName
+								LEFT JOIN #AttackSurfaceRiskWeights sw
+									ON sw.RiskCategory = 'DirectPermissions'
+								WHERE LSP.LoginName = LP.LoginName
+								  AND LSP.PermissionSource = 'Direct'
+								FOR XML PATH('Permission'), TYPE
+							) AS Direct,
 
-        ----------------------------------------------------------------------
-        -- ATTACK SURFACE RISK SECTION
-        -- Includes ALL attack vectors:
-        --   Direct / WithGrant permissions, Jobs, Proxies, Credentials,
-        --   Impersonation, Linked Servers, Orphan Logins, Invalid Default DB
-        ----------------------------------------------------------------------
-        (
-            SELECT
-                --------------------------------------------------------------
-                -- DIRECT + WITH GRANT PERMISSIONS
-                --------------------------------------------------------------
-                (
-                    SELECT
-                        (
-                            -- Direct permissions
-                            SELECT
-                                LSP.PermissionName AS [@Name],
-                                CASE WHEN LSP.PermissionName <> 'CONNECT SQL'
-                                        THEN ISNULL(PR.RiskPoints, 0) * ISNULL(sw.RiskWeight, 0)
-                                END AS [@RiskPoints]
-                            FROM #LoginProfile LSP
-                            LEFT JOIN #AccessRightsRisks PR
-                                ON LSP.PermissionName = PR.PermissionName
-                            LEFT JOIN #AttackSurfaceRiskWeights sw
-                                ON sw.RiskCategory = 'DirectPermissions'
-                            WHERE LSP.LoginName = LP.LoginName
-                              AND LSP.PermissionSource = 'Direct'
-                            FOR XML PATH('Permission'), TYPE
-                        ) AS Direct,
+							(
+								-- Grant Options
+								SELECT
+									LSP.PermissionName AS [@Name],
+									ISNULL(PR.RiskPoints, 0) * ISNULL(sw.RiskWeight, 0) AS [@RiskPoints]
+								FROM #LoginProfile LSP
+								LEFT JOIN #AccessRightsRisks PR
+									ON LSP.PermissionName = PR.PermissionName
+								LEFT JOIN #AttackSurfaceRiskWeights sw
+									ON sw.RiskCategory = 'GrantOption'
+								WHERE LSP.LoginName = LP.LoginName
+								  AND LSP.WithGrantOption = 1
+								FOR XML PATH('Permission'), TYPE
+							) AS WithGrant
 
-                        (
-                            -- Grant Options
-                            SELECT
-                                LSP.PermissionName AS [@Name],
-                                ISNULL(PR.RiskPoints, 0) * ISNULL(sw.RiskWeight, 0) AS [@RiskPoints]
-                            FROM #LoginProfile LSP
-                            LEFT JOIN #AccessRightsRisks PR
-                                ON LSP.PermissionName = PR.PermissionName
-                            LEFT JOIN #AttackSurfaceRiskWeights sw
-                                ON sw.RiskCategory = 'GrantOption'
-                            WHERE LSP.LoginName = LP.LoginName
-                              AND LSP.WithGrantOption = 1
-                            FOR XML PATH('Permission'), TYPE
-                        ) AS WithGrant
+						WHERE EXISTS (SELECT 1 FROM #LoginProfile LSP WHERE LSP.LoginName = LP.LoginName)
+						FOR XML PATH('Permissions'), TYPE
+					),
 
-                    WHERE EXISTS (SELECT 1 FROM #LoginProfile LSP WHERE LSP.LoginName = LP.LoginName)
-                    FOR XML PATH('Permissions'), TYPE
-                ),
+					--------------------------------------------------------------
+					-- JOB OWNER RISK
+					--------------------------------------------------------------
+					(
+						SELECT
+							CASE 
+								WHEN EXISTS (SELECT 1 FROM #OwnedJobs WHERE LoginName = LP.LoginName)
+								THEN
+								(
+									SELECT
+										-- Parent node risk
+										(
+											SELECT SUM(RiskWeight)
+											FROM #AttackSurfaceRiskWeights
+											WHERE RiskCategory = 'JobOwner'
+										) AS [@RiskPoints],
 
-                --------------------------------------------------------------
-                -- JOB OWNER RISK
-                --------------------------------------------------------------
-                (
-                    SELECT
-                        CASE 
-                            WHEN EXISTS (SELECT 1 FROM #OwnedJobs WHERE LoginName = LP.LoginName)
-                            THEN
-                                (
-                                    SELECT
-                                        -- Parent node risk
-                                        (
-                                            SELECT SUM(RiskWeight)
-                                            FROM #AttackSurfaceRiskWeights
-                                            WHERE RiskCategory = 'JobOwner'
-                                        ) AS [@RiskPoints],
+										-- List owned jobs
+										(
+											SELECT oj.JobName AS [@Name]
+											FROM #OwnedJobs oj
+											JOIN #AttackSurfaceRiskWeights sw
+												ON sw.RiskCategory = 'JobOwner'
+											WHERE oj.LoginName = LP.LoginName
+											FOR XML PATH('Job'), TYPE
+										)
+									FOR XML PATH('OwnedJobs'), TYPE
+								)
+							END
+					),
 
-                                        -- List owned jobs
-                                        (
-                                            SELECT oj.JobName AS [@Name]
-                                            FROM #OwnedJobs oj
-                                            JOIN #AttackSurfaceRiskWeights sw
-                                                ON sw.RiskCategory = 'JobOwner'
-                                            WHERE oj.LoginName = LP.LoginName
-                                            FOR XML PATH('Job'), TYPE
-                                        )
-                                    FOR XML PATH('OwnedJobs'), TYPE
-                                )
-                        END
-                ),
+					--------------------------------------------------------------
+					-- PROXY OWNER RISK
+					--------------------------------------------------------------
+					(
+						SELECT 
+							op.ProxyName AS [@Name], 
+							s.RiskWeight AS [@RiskPoints]
+						FROM #OwnedProxies op 
+						CROSS JOIN #AttackSurfaceRiskWeights s
+						WHERE s.RiskCategory = 'ProxyOwner'
+						  AND op.LoginName = LP.LoginName
+						FOR XML PATH('Proxy'), TYPE
+					),
 
-                --------------------------------------------------------------
-                -- PROXY OWNER RISK
-                --------------------------------------------------------------
-                (
-                    SELECT 
-                        op.ProxyName AS [@Name], 
-                        s.RiskWeight AS [@RiskPoints]
-                    FROM #OwnedProxies op 
-                    CROSS JOIN #AttackSurfaceRiskWeights s
-                    WHERE s.RiskCategory = 'ProxyOwner'
-                      AND op.LoginName = LP.LoginName
-                    FOR XML PATH('Proxy'), TYPE
-                ),
+					--------------------------------------------------------------
+					-- CREDENTIAL OWNER RISK
+					--------------------------------------------------------------
+					(
+						SELECT 
+							oc.CredentialName AS [@Name], 
+							s.RiskWeight AS [@RiskPoints]
+						FROM #OwnedCredentials oc 
+						CROSS JOIN #AttackSurfaceRiskWeights s
+						WHERE s.RiskCategory = 'CredentialOwner'
+						  AND oc.LoginName = LP.LoginName
+						FOR XML PATH('Credential'), TYPE
+					),
 
-                --------------------------------------------------------------
-                -- CREDENTIAL OWNER RISK
-                --------------------------------------------------------------
-                (
-                    SELECT 
-                        oc.CredentialName AS [@Name], 
-                        s.RiskWeight AS [@RiskPoints]
-                    FROM #OwnedCredentials oc 
-                    CROSS JOIN #AttackSurfaceRiskWeights s
-                    WHERE s.RiskCategory = 'CredentialOwner'
-                      AND oc.LoginName = LP.LoginName
-                    FOR XML PATH('Credential'), TYPE
-                ),
+					--------------------------------------------------------------
+					-- IMPERSONATION RISK
+					--------------------------------------------------------------
+					(
+						SELECT 
+							it.ImpersonatedLogin AS [@Name], 
+							s.RiskWeight AS [@RiskPoints]
+						FROM #ImpersonationTargets it 
+						CROSS JOIN #AttackSurfaceRiskWeights s
+						WHERE s.RiskCategory = 'Impersonation'
+						  AND it.LoginName = LP.LoginName
+						FOR XML PATH('Impersonation'), TYPE
+					),
 
-                --------------------------------------------------------------
-                -- IMPERSONATION RISK
-                --------------------------------------------------------------
-                (
-                    SELECT 
-                        it.ImpersonatedLogin AS [@Name], 
-                        s.RiskWeight AS [@RiskPoints]
-                    FROM #ImpersonationTargets it 
-                    CROSS JOIN #AttackSurfaceRiskWeights s
-                    WHERE s.RiskCategory = 'Impersonation'
-                      AND it.LoginName = LP.LoginName
-                    FOR XML PATH('Impersonation'), TYPE
-                ),
+					--------------------------------------------------------------
+					-- LINKED SERVER RISK
+					--------------------------------------------------------------
+					(
+						SELECT 
+							ls.LinkedServerName AS [@Name], 
+							s.RiskWeight AS [@RiskPoints]
+						FROM #LinkedServers ls 
+						CROSS JOIN #AttackSurfaceRiskWeights s
+						WHERE s.RiskCategory = 'LinkedServer'
+						  AND ls.LoginName = LP.LoginName
+						FOR XML PATH('LinkedServer'), TYPE
+					),
 
-                --------------------------------------------------------------
-                -- LINKED SERVER RISK
-                --------------------------------------------------------------
-                (
-                    SELECT 
-                        ls.LinkedServerName AS [@Name], 
-                        s.RiskWeight AS [@RiskPoints]
-                    FROM #LinkedServers ls 
-                    CROSS JOIN #AttackSurfaceRiskWeights s
-                    WHERE s.RiskCategory = 'LinkedServer'
-                      AND ls.LoginName = LP.LoginName
-                    FOR XML PATH('LinkedServer'), TYPE
-                ),
+					--------------------------------------------------------------
+					-- ORPHAN LOGIN RISK
+					--------------------------------------------------------------
+					(
+						SELECT 
+							ol.LoginName AS [@Name], 
+							s.RiskWeight AS [@RiskPoints]
+						FROM #OrphanLogins ol 
+						CROSS JOIN #AttackSurfaceRiskWeights s
+						WHERE s.RiskCategory = 'OrphanLogin'
+						  AND ol.LoginName = LP.LoginName
+						FOR XML PATH('OrphanLogin'), TYPE
+					),
 
-                --------------------------------------------------------------
-                -- ORPHAN LOGIN RISK
-                --------------------------------------------------------------
-                (
-                    SELECT 
-                        ol.LoginName AS [@Name], 
-                        s.RiskWeight AS [@RiskPoints]
-                    FROM #OrphanLogins ol 
-                    CROSS JOIN #AttackSurfaceRiskWeights s
-                    WHERE s.RiskCategory = 'OrphanLogin'
-                      AND ol.LoginName = LP.LoginName
-                    FOR XML PATH('OrphanLogin'), TYPE
-                ),
+					--------------------------------------------------------------
+					-- INVALID DEFAULT DATABASE RISK
+					--------------------------------------------------------------
+					(
+						SELECT 
+							idd.LoginName AS [@Name], 
+							s.RiskWeight AS [@RiskPoints]
+						FROM #InvalidDefaultDB idd 
+						CROSS JOIN #AttackSurfaceRiskWeights s
+						WHERE s.RiskCategory = 'DefaultDB'
+						  AND idd.LoginName = LP.LoginName
+						FOR XML PATH('InvalidDefaultDB'), TYPE
+					)
 
-                --------------------------------------------------------------
-                -- INVALID DEFAULT DATABASE RISK
-                --------------------------------------------------------------
-                (
-                    SELECT 
-                        idd.LoginName AS [@Name], 
-                        s.RiskWeight AS [@RiskPoints]
-                    FROM #InvalidDefaultDB idd 
-                    CROSS JOIN #AttackSurfaceRiskWeights s
-                    WHERE s.RiskCategory = 'DefaultDB'
-                      AND idd.LoginName = LP.LoginName
-                    FOR XML PATH('InvalidDefaultDB'), TYPE
-                )
+				FOR XML PATH('AttackSurfaceRisk'), TYPE
+			),
 
-            FOR XML PATH('AttackSurfaceRisk'), TYPE
-        ),
+			----------------------------------------------------------------------
+			-- SECURITY RISK CHECKS (RAW CHECKS WITHOUT REMEDIATION)
+			----------------------------------------------------------------------
+			(
+				SELECT
+				SR.Category AS [@Category],
+				CASE 
+				WHEN SR.Category = 'LoginDisabled' AND LP.IsSA = 1 
+				THEN 
+				(
+					SELECT RiskPoints 
+					FROM #SecurityRiskWeights 
+					WHERE Category = 'BuiltinSA'
+				)
+				ELSE SR.RiskPoints
+				END AS [@RiskPoints]
+				FROM #SecurityRiskWeights SR
+				WHERE SR.Category IN ('LoginType','PolicyCheck','ExpiryCheck','LoginDisabled','SaNotRenamed','StaleLogin')
+				AND EXISTS
+				(
+					SELECT 1
+					FROM #LoginProfile LP2
+					WHERE 
+							LP2.LoginName = LP.LoginName
+						AND 
+						(
+								(SR.Category='LoginType'     AND SR.CheckValue = LP2.LoginType)
+							OR (SR.Category='PolicyCheck'   AND SR.CheckValue = LP2.IsPolicyChecked)
+							OR (SR.Category='ExpiryCheck'   AND SR.CheckValue = LP2.IsExpirationChecked)
+							OR (SR.Category='LoginDisabled' AND SR.CheckValue = LP2.LoginDisabled)
+							OR (SR.Category='StaleLogin'    AND DATEDIFF(DAY, LP2.LastUpdateDate, GETDATE()) > CAST(SR.CheckValue AS INT))
+							OR 
+							(
+									SR.Category='SaNotRenamed'  AND SUSER_SID(LP2.LoginName)=0x01 
+								AND SR.CheckValue = CASE WHEN LOWER(LP2.LoginName)='sa' THEN 'YES' ELSE 'NO' END
+							)
+						)
+				)
+				FOR XML PATH('Check'), TYPE
+			) AS [SecurityRisk],
 
-        ----------------------------------------------------------------------
-        -- SECURITY RISK CHECKS (RAW CHECKS WITHOUT REMEDIATION)
-        ----------------------------------------------------------------------
-        (
-            SELECT
-                SR.Category AS [@Category],
-                CASE 
-                    WHEN SR.Category = 'LoginDisabled' AND LP.IsSA = 1 
-                        THEN (SELECT RiskPoints FROM #SecurityRiskWeights WHERE Category = 'BuiltinSA')
-                    ELSE SR.RiskPoints
-                END AS [@RiskPoints]
-            FROM #SecurityRiskWeights SR
-            WHERE SR.Category IN ('LoginType','PolicyCheck','ExpiryCheck','LoginDisabled','SaNotRenamed','StaleLogin')
-              AND EXISTS
-              (
-                  SELECT 1
-                  FROM #LoginProfile LP2
-                  WHERE LP2.LoginName = LP.LoginName
-                    AND (
-                            (SR.Category='LoginType'     AND SR.CheckValue = LP2.LoginType)
-                         OR (SR.Category='PolicyCheck'   AND SR.CheckValue = LP2.IsPolicyChecked)
-                         OR (SR.Category='ExpiryCheck'   AND SR.CheckValue = LP2.IsExpirationChecked)
-                         OR (SR.Category='LoginDisabled' AND SR.CheckValue = LP2.LoginDisabled)
-                         OR (SR.Category='SaNotRenamed'  AND SUSER_SID(LP2.LoginName)=0x01 
-                            AND SR.CheckValue = CASE WHEN LOWER(LP2.LoginName)='sa' THEN 'YES' ELSE 'NO' END)
-                         OR (SR.Category='StaleLogin'    AND DATEDIFF(DAY, LP2.LastUpdateDate, GETDATE()) > CAST(SR.CheckValue AS INT))
-                        )
-              )
-            FOR XML PATH('Check'), TYPE
-        ) AS [SecurityRisk],
+			----------------------------------------------------------------------
+			-- SECURITY RISK REMEDIATION DETAILS
+			-- Provides: WhyDangerous, RecommendedFix, CheckValue, and RiskPoints
+			----------------------------------------------------------------------
+			(
+				SELECT
+					SR.Category AS [@Category],
+					RM.WhyDangerous AS [@Why],
+					RM.RecommendedFix AS [@Fix],
+					SR.CheckValue AS [@CheckValue],
+					CASE 
+						WHEN SR.Category='LoginDisabled' AND LP.IsSA =1 
+						THEN 
+						(
+							SELECT RiskPoints 
+							FROM #SecurityRiskWeights 
+							WHERE Category='BuiltinSA'
+						)
+						ELSE SR.RiskPoints
+					END AS [@RiskPoints]
+				FROM #SecurityRiskWeights SR
+				INNER JOIN #SecurityRiskRemediation RM 
+					ON SR.Category = RM.RiskCode
+				WHERE SR.Category IN ('LoginType','PolicyCheck','ExpiryCheck','LoginDisabled','SaNotRenamed','StaleLogin')
+				  AND EXISTS
+				  (
+					  SELECT 1
+					  FROM #LoginProfile LP2
+					  WHERE LP2.LoginName = LP.LoginName
+						AND (
+								(SR.Category='LoginType'     AND SR.CheckValue = LP2.LoginType)
+							 OR (SR.Category='PolicyCheck'   AND SR.CheckValue = LP2.IsPolicyChecked)
+							 OR (SR.Category='ExpiryCheck'   AND SR.CheckValue = LP2.IsExpirationChecked)
+							 OR (SR.Category='LoginDisabled' AND SR.CheckValue = LP2.LoginDisabled)
+							 OR 
+							 (
+								SR.Category='SaNotRenamed'  AND SUSER_SID(LP2.LoginName)=0x01 
+								AND SR.CheckValue = CASE WHEN LOWER(LP2.LoginName)='sa' THEN 'YES' ELSE 'NO' END)
+							 OR (SR.Category='StaleLogin'    AND DATEDIFF(DAY, LP2.LastUpdateDate, GETDATE()) > CAST(SR.CheckValue AS INT))
+							)
+				  )
+				FOR XML PATH('Check'), TYPE
+			) AS [SecurityRiskRemediation]
 
-        ----------------------------------------------------------------------
-        -- SECURITY RISK REMEDIATION DETAILS
-        -- Provides: WhyDangerous, RecommendedFix, CheckValue, and RiskPoints
-        ----------------------------------------------------------------------
-        (
-            SELECT
-                SR.Category AS [@Category],
-                RM.WhyDangerous AS [@Why],
-                RM.RecommendedFix AS [@Fix],
-                SR.CheckValue AS [@CheckValue],
-                CASE 
-                    WHEN SR.Category='LoginDisabled' AND LP.IsSA =1 
-                        THEN (SELECT RiskPoints FROM #SecurityRiskWeights WHERE Category='BuiltinSA')
-                    ELSE SR.RiskPoints
-                END AS [@RiskPoints]
-            FROM #SecurityRiskWeights SR
-            INNER JOIN #SecurityRiskRemediation RM 
-                ON SR.Category = RM.RiskCode
-            WHERE SR.Category IN ('LoginType','PolicyCheck','ExpiryCheck','LoginDisabled','SaNotRenamed','StaleLogin')
-              AND EXISTS
-              (
-                  SELECT 1
-                  FROM #LoginProfile LP2
-                  WHERE LP2.LoginName = LP.LoginName
-                    AND (
-                            (SR.Category='LoginType'     AND SR.CheckValue = LP2.LoginType)
-                         OR (SR.Category='PolicyCheck'   AND SR.CheckValue = LP2.IsPolicyChecked)
-                         OR (SR.Category='ExpiryCheck'   AND SR.CheckValue = LP2.IsExpirationChecked)
-                         OR (SR.Category='LoginDisabled' AND SR.CheckValue = LP2.LoginDisabled)
-                         OR (SR.Category='SaNotRenamed'  AND SUSER_SID(LP2.LoginName)=0x01 
-                            AND SR.CheckValue = CASE WHEN LOWER(LP2.LoginName)='sa' THEN 'YES' ELSE 'NO' END)
-                         OR (SR.Category='StaleLogin'    AND DATEDIFF(DAY, LP2.LastUpdateDate, GETDATE()) > CAST(SR.CheckValue AS INT))
-                        )
-              )
-            FOR XML PATH('Check'), TYPE
-        ) AS [SecurityRiskRemediation]
-
-    FOR XML PATH('SecurityReport'), TYPE
-) AS SecurityReportXML
---==============================================================================
-
+		FOR XML PATH('SecurityReport'), TYPE
+	) AS SecurityReportXML
 FROM 
 (
 	SELECT DISTINCT LoginName,LoginType,LoginDisabled,LastUpdateDate,IsSA FROM #LoginProfile
